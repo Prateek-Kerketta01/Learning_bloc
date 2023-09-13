@@ -1,11 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
-
+// ignore: depend_on_referenced_packages
+import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
-import 'package:bloc/bloc.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:lbloc/bloc/bloc_action.dart';
 
 import 'dart:developer' as devtools show log;
+
+import 'package:lbloc/bloc/person.dart';
+import 'package:lbloc/bloc/persons_bloc.dart';
 
 extension Log on Object {
   void log() => devtools.log(toString());
@@ -17,6 +21,7 @@ void main(List<String> args) {
     theme: ThemeData(
       // primaryColor: Colors.black,
       primarySwatch: Colors.blue,
+      useMaterial3: true,
     ),
     debugShowCheckedModeBanner: false,
     home: BlocProvider(
@@ -24,56 +29,6 @@ void main(List<String> args) {
       child: const HomePage(),
     ),
   ));
-}
-
-@immutable
-abstract class LoadAction {
-  const LoadAction();
-}
-
-// Define an action for loading persons
-// This is my action(event)
-@immutable
-class LoadPersonsAction implements LoadAction {
-  final PersonUrl url;
-
-  const LoadPersonsAction({required this.url}) : super();
-}
-
-// Define a list of person URLs
-enum PersonUrl {
-  person1,
-  person2,
-}
-
-// Add the URLs to PersonUrl
-// extension is a feature that allows you to add new functionality to existing classes.
-extension UrlString on PersonUrl {
-  String get urlString {
-    switch (this) {
-      case PersonUrl.person1:
-        return "http://127.0.0.1:5501/api/persons1.json";
-
-      case PersonUrl.person2:
-        return "http://127.0.0.1:5501/api/person2.json";
-    }
-  }
-}
-
-// Program the Person class
-@immutable
-class Person {
-  final String name;
-  final int age;
-
-  const Person({required this.name, required this.age});
-
-  Person.fromJson(Map<String, dynamic> json)
-      : name = json['name'] as String,
-        age = json['age'] as int;
-
-  @override
-  String toString() => 'Person (name: $name, age: $age)';
 }
 
 // We need to download and parse the JSON data
@@ -84,46 +39,7 @@ Future<Iterable<Person>> getPersons(String url) => HttpClient()
     .then((str) => json.decode(str) as List<dynamic>)
     .then((list) => list.map((e) => Person.fromJson(e)));
 
-// This is a state which is going to fetch the data
-@immutable
-class FetchResult {
-  final Iterable<Person> persons; //
-  final bool isRetrievedFromCache;
-
-  const FetchResult({
-    required this.persons,
-    required this.isRetrievedFromCache,
-  });
-
-  @override
-  String toString() =>
-      'FetchResult (isRetrievedFromCache: $isRetrievedFromCache, persons: $persons )';
-}
-
 // Writing the BLoc header
-class PersonsBloc extends Bloc<LoadAction, FetchResult?> {
-  final Map<PersonUrl, Iterable<Person>> _cache = {};
-  PersonsBloc() : super(null) {
-    on<LoadPersonsAction>(
-      (event, emit) async {
-        final url = event.url;
-        if (_cache.containsKey(url)) {
-          // we have the value in the cache
-          final cachedPersons = _cache[url]!;
-          final result =
-              FetchResult(persons: cachedPersons, isRetrievedFromCache: true);
-          emit(result);
-        } else {
-          final persons = await getPersons(url.urlString);
-          _cache[url] = persons;
-          final result =
-              FetchResult(persons: persons, isRetrievedFromCache: false);
-          emit(result);
-        }
-      },
-    );
-  }
-}
 
 extension Subscript<T> on Iterable<T> {
   T? operator [](int index) => length > index ? elementAt(index) : null;
@@ -135,7 +51,7 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('HomePage')),
+      appBar: AppBar(title: const Text('HomePage')),
       body: Column(
         children: [
           Row(
@@ -143,7 +59,8 @@ class HomePage extends StatelessWidget {
               TextButton(
                 onPressed: () {
                   context.read<PersonsBloc>().add(
-                        const LoadPersonsAction(url: PersonUrl.person1),
+                        const LoadPersonsAction(
+                            url: person1Url, loader: getPersons),
                       );
                 },
                 child: const Text(
@@ -153,7 +70,8 @@ class HomePage extends StatelessWidget {
               TextButton(
                 onPressed: () {
                   context.read<PersonsBloc>().add(
-                        const LoadPersonsAction(url: PersonUrl.person2),
+                        const LoadPersonsAction(
+                            url: person2Url, loader: getPersons),
                       );
                 },
                 child: const Text(
@@ -170,7 +88,7 @@ class HomePage extends StatelessWidget {
               fetchResult?.log();
               final persons = fetchResult?.persons;
               if (persons == null) {
-                return SizedBox();
+                return const SizedBox();
               }
               return Expanded(
                 child: ListView.builder(
